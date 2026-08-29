@@ -1,0 +1,54 @@
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python 虚拟环境
+.venv/
+venv/
+env/
+
+# Python 测试和检查缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 环境变量和密钥
+.env
+.env.*
+!.env.example
+
+# SQLite 数据库
+*.db
+*.sqlite
+*.sqlite3
+checkpoints.sqlite
+
+# Node.js 依赖
+node_modules/
+
+# 前端构建产物
+dist/
+.vite/
+coverage/
+
+# 项目运行时产生的文件
+workspaces/
+logs/
+tmp/
+
+# 日志
+*.log
+
+# 临时文件
+*.tmp
+*.temp
