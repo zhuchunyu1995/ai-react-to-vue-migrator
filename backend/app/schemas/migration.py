@@ -36,13 +36,16 @@ class MigrationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     # 迁移任务的唯一标识，用于查询任务状态和恢复工作流
-    id: str
+    id: int
 
     # 用户提交的 React 文件名称
     filename: str
 
     # 当前任务状态，例如 created、analyzing、completed
     status: str
+
+    # 当前任务节点，例如 create_plan
+    current_node: str | None
 
     # 迁移任务的创建时间
     created_at: datetime

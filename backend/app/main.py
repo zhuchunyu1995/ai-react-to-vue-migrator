@@ -1,5 +1,6 @@
 from fastapi import FastAPI
-from routes.migrations import router as migrations_router
+
+from app.routes.migrations import router as migrations_router
 
 app = FastAPI()
 

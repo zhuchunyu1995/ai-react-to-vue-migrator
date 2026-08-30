@@ -24,3 +24,24 @@ SFC / ESLint / 类型 / Build 验证
 验证失败 → AI 自动修复
     ↓
 生成迁移报告
+```
+
+## 二、当前进度
+
+- FastAPI 基础服务、异步数据库会话和迁移任务模型；
+- 创建迁移任务与查询任务接口；
+- LangGraph 和大模型基础链路；
+- Vue 3 迁移工作台首页；
+- Node Runner 基础工程。
+
+## 三、关键目录
+
+```text
+react-vue-migrator/
+├── backend/      # FastAPI、LangGraph、数据库和大模型调用
+├── frontend/     # Vue 3 迁移工作台
+├── node-runner/  # AST 分析和 Vue 工具链执行入口
+├── sandbox/      # 隔离验证模板
+├── examples/     # React 迁移样例
+└── tests/        # 测试
+```

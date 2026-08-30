@@ -1,11 +1,12 @@
 from collections.abc import AsyncGenerator
 
-from core.config import get_settings
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+
+from app.core.config import get_settings
 
 settings = get_settings()
 
@@ -15,7 +16,7 @@ async_engine = create_async_engine(
 )
 
 # 异步会话工厂
-async_session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
+AsyncSessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
     bind=async_engine,
     expire_on_commit=False,
     autoflush=False,
@@ -24,5 +25,5 @@ async_session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
 
 # 异步数据库会话依赖注入
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session_factory() as session:
+    async with AsyncSessionLocal() as session:
         yield session

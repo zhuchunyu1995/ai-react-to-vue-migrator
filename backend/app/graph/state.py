@@ -5,7 +5,7 @@ class MigrationState(TypedDict, total=False):
     """React → Vue 迁移工作流的共享状态。"""
 
     # 当前迁移任务的唯一标识，用于查询任务、保存状态和关联工作流 Checkpoint
-    task_id: str
+    task_id: int
 
     # 用户提交的 React 源文件名，例如 UserList.tsx
     filename: str

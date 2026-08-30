@@ -32,6 +32,9 @@ htmlcov/
 *.sqlite
 *.sqlite3
 checkpoints.sqlite
+backend/data/*.db
+backend/data/*.sqlite
+backend/data/*.sqlite3
 
 # Node.js 依赖
 node_modules/

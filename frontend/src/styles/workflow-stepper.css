@@ -1,0 +1,227 @@
+.workflow-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.panel-heading,
+.preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-heading p {
+  margin: 0 0 5px;
+  color: var(--vue);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 19px;
+  letter-spacing: -0.025em;
+}
+
+.status-pill {
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.status-pill:not(.idle):not(.failed) {
+  border-color: rgba(37, 99, 235, 0.18);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--primary);
+}
+
+.status-pill.failed {
+  border-color: rgba(185, 28, 28, 0.18);
+  background: rgba(185, 28, 28, 0.08);
+  color: var(--danger);
+}
+
+.task-message {
+  display: flex;
+  gap: 11px;
+  margin: 22px 0 20px;
+  padding: 14px;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  border-radius: 12px;
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.message-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  font-family: serif;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.task-message strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: 11px;
+}
+
+.task-message p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.step-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step-list li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 12px;
+  min-height: 62px;
+}
+
+.step-list li:not(:last-child)::after {
+  position: absolute;
+  top: 28px;
+  bottom: 0;
+  left: 13px;
+  width: 1px;
+  background: var(--border);
+  content: "";
+}
+
+.step-marker {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.step-list strong {
+  display: block;
+  padding-top: 3px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.step-list p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.step-list li.active .step-marker {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+}
+
+.step-list li.active strong {
+  color: var(--primary);
+}
+
+.step-list li.done .step-marker {
+  border-color: var(--vue);
+  background: var(--vue);
+  color: white;
+}
+
+.step-list li.error .step-marker {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: white;
+}
+
+.mapping-preview {
+  margin-top: auto;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-muted);
+}
+
+.preview-heading span {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.preview-heading small {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.mapping-preview ul {
+  display: grid;
+  gap: 8px;
+  margin: 13px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mapping-preview li {
+  display: grid;
+  grid-template-columns: 1fr 20px 1fr;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-align: center;
+}
+
+code {
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+@media (max-width: 900px) {
+  .mapping-preview {
+    margin-top: 16px;
+  }
+}

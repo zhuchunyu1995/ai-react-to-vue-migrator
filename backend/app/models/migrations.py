@@ -32,7 +32,7 @@ class Migration(Base):
     # 当前业务状态
     status: Mapped[str] = mapped_column(
         String(50),
-        default="created",
+        default="queued",
         nullable=False,
     )
 

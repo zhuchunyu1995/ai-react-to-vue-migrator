@@ -75,3 +75,18 @@ react-vue-migrator/
 ├── sandbox/
 ├── examples/
 └── tests/
+```
+
+前端当前关键结构：
+
+```text
+frontend/src/
+├── api/                  # FastAPI 请求封装
+├── components/migration/ # 迁移工作台页面组件
+├── router/               # 页面路由
+├── types/                # 前端迁移任务类型
+├── views/                # 页面级组件
+├── App.vue
+├── main.ts
+└── style.css
+```

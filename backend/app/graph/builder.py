@@ -1,10 +1,10 @@
-from graph.nodes.analyze_source import analyze_source
-from graph.nodes.create_plan import create_plan
-from graph.state import MigrationState
+from app.graph.nodes.analyze_source import analyze_source
+from app.graph.nodes.create_plan import create_plan
+from app.graph.state import MigrationState
 from langgraph.graph import END, START, StateGraph
 
 
-def create_migration_graph():
+async def create_migration_graph():
     """创建 React → Vue 迁移工作流。"""
 
     builder = StateGraph(MigrationState)
@@ -17,3 +17,26 @@ def create_migration_graph():
     builder.add_edge("create_plan", END)
 
     return builder.compile()
+
+
+async def run_migration_graph(
+    task_id: int,
+    filename: str,
+    source_code: str,
+) -> None:
+    graph = await create_migration_graph()
+
+    migration_data: MigrationState = {
+        "task_id": task_id,
+        "filename": filename,
+        "source_code": source_code,
+    }
+
+    await graph.ainvoke(
+        migration_data,
+        config={
+            "configurable": {
+                "thread_id": task_id,
+            }
+        },
+    )
