@@ -1,0 +1,133 @@
+.report-heading {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.report-heading button {
+  padding: 9px 12px;
+  border-color: var(--border-strong);
+  border-radius: 8px;
+}
+
+.report-section {
+  margin-top: 22px;
+}
+
+.report-section h3,
+.report-columns h3 {
+  font-size: 14px;
+}
+
+.report-mappings {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.report-mappings article {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+
+.report-mappings article > span {
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.report-mappings article > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin-top: 9px;
+}
+
+.report-mappings code {
+  overflow-wrap: anywhere;
+  color: var(--text-strong);
+  font: 11px/1.5 var(--font-mono);
+}
+
+.report-mappings b {
+  color: var(--vue);
+}
+
+.report-mappings p,
+.report-columns p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.report-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.report-columns section {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+
+@media (max-width: 800px) {
+  .result-metrics,
+  .validation-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .result-metrics article:nth-child(2) {
+    border-right: 0;
+  }
+
+  .result-metrics article:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 600px) {
+  .result-header,
+  .artifact-toolbar,
+  .report-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .result-metrics,
+  .validation-grid,
+  .report-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .result-metrics article {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .result-tabs {
+    overflow-x: auto;
+  }
+
+  .result-tabs button {
+    flex: 0 0 auto;
+  }
+
+  .result-content {
+    padding: 14px;
+  }
+
+  .artifact-actions {
+    justify-content: flex-end;
+  }
+
+  .report-mappings article > div {
+    grid-template-columns: 1fr;
+  }
+}

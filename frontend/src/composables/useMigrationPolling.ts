@@ -5,7 +5,7 @@ import type { MigrationTask } from "@/types/migration";
 
 const POLLING_INTERVAL = 2000;
 
-const STOP_STATUSES = ["waiting_for_review", "completed", "failed"];
+const STOP_STATUSES = ["rejected", "cancelled", "completed", "failed"];
 
 export function useMigrationPolling() {
   const task = ref<MigrationTask | null>(null);
@@ -32,7 +32,12 @@ export function useMigrationPolling() {
       task.value = await getMigration(taskId);
       pollingError.value = null;
 
-      if (STOP_STATUSES.includes(task.value.status)) {
+      const planIsReady =
+        task.value.status === "waiting_for_review" &&
+        task.value.migration_plan !== null &&
+        task.value.migration_plan !== undefined;
+
+      if (STOP_STATUSES.includes(task.value.status) || planIsReady) {
         stopPolling();
         return;
       }
@@ -53,6 +58,12 @@ export function useMigrationPolling() {
     void poll(taskId);
   };
 
+  const resetPolling = () => {
+    stopPolling();
+    task.value = null;
+    pollingError.value = null;
+  };
+
   onBeforeUnmount(() => {
     stopPolling();
   });
@@ -63,5 +74,6 @@ export function useMigrationPolling() {
     pollingError,
     startPolling,
     stopPolling,
+    resetPolling,
   };
 }

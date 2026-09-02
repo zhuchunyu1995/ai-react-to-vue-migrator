@@ -1,25 +1,24 @@
 import process from "node:process";
 
+import type { AnalyzeErrorResponse, AnalyzeRequest } from "./types.js";
+
 import { analyzeReactSource } from "./analyzer.js";
-import type {
-  AnalyzeErrorResponse,
-  AnalyzeRequest,
-  AnalyzeSuccessResponse,
-} from "./types.js";
+import { validateVueProject } from "./project-validator.js";
 
-/**
- * 从标准输入 stdin 中读取 Python 传来的 JSON。
- */
+interface RunnerRequest {
+  action: "analyze_react" | "validate_vue";
+  filename: string;
+  source_code: string;
+}
+
 async function readStdin(): Promise<string> {
-  process.stdin.setEncoding("utf8");
-
-  let input = "";
+  const chunks: Buffer[] = [];
 
   for await (const chunk of process.stdin) {
-    input += chunk;
+    chunks.push(Buffer.from(chunk));
   }
 
-  return input;
+  return Buffer.concat(chunks).toString("utf-8");
 }
 
 /**
@@ -71,30 +70,32 @@ function createErrorResponse(error: unknown): AnalyzeErrorResponse {
 }
 
 /**
- * Node Runner 主入口。
- *
- * stdout 只能输出最终 JSON，否则 Python 无法正确解析。
+ * 读取 Python 后端从 stdin 传入的数据。
  */
 async function main(): Promise<void> {
   try {
     const rawInput = await readStdin();
-    const parsedInput: unknown = JSON.parse(rawInput);
-    const request = validateRequest(parsedInput);
+    const request = JSON.parse(rawInput) as RunnerRequest;
 
-    const analysis = analyzeReactSource(request.filename, request.source_code);
+    let result: unknown;
 
-    const response: AnalyzeSuccessResponse = {
-      success: true,
-      data: analysis,
-    };
+    if (request.action === "analyze_react") {
+      result = analyzeReactSource(request.filename, request.source_code);
+    } else if (request.action === "validate_vue") {
+      result = await validateVueProject(request.filename, request.source_code);
+    } else {
+      throw new Error(`不支持的 action：${request.action}`);
+    }
 
-    process.stdout.write(JSON.stringify(response));
+    /*
+     * stdout 只能输出最终 JSON。
+     * 调试信息应该用 console.error 输出到 stderr。
+     */
+    process.stdout.write(JSON.stringify(result));
   } catch (error) {
-    const response = createErrorResponse(error);
+    const message = error instanceof Error ? error.message : String(error);
 
-    process.stdout.write(JSON.stringify(response));
-
-    // 非零退出码告诉 Python：本次分析执行失败
+    console.error(message);
     process.exitCode = 1;
   }
 }

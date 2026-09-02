@@ -1,16 +1,21 @@
+from typing import Any
+
 from app.graph.state import MigrationState
-from app.integrations.node_runner import node_runner_client
-from app.services.migration_status import save_migration_status
+from app.services.node_runner import (
+    analyze_react_source,
+)
 
 
-async def analyze_source(state: MigrationState) -> dict:
-    """分析 React 源码。"""
+async def analyze_source(
+    state: MigrationState,
+) -> dict[str, Any]:
+    """分析 React 源代码。"""
 
     task_id = state.get("task_id")
     filename = state.get("filename")
     source_code = state.get("source_code")
 
-    if not task_id:
+    if task_id is None:
         raise ValueError("task_id is required")
 
     if not filename:
@@ -19,20 +24,14 @@ async def analyze_source(state: MigrationState) -> dict:
     if not source_code:
         raise ValueError("source_code is required")
 
-    # 告诉数据库：当前已经进入源码分析节点
-    await save_migration_status(
-        task_id=task_id,
-        status="analyzing",
-        current_node="analyze_source",
-    )
-
-    analysis = await node_runner_client.analyze(
+    # Python 调用 Node Runner。
+    source_analysis = await analyze_react_source(
         filename=filename,
         source_code=source_code,
     )
 
     return {
-        "source_analysis": analysis.model_dump(mode="json"),
+        "source_analysis": source_analysis,
         "status": "analyzed",
         "current_node": "analyze_source",
     }

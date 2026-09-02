@@ -3,62 +3,23 @@ import { computed, ref, watch } from "vue";
 
 import { createMigration } from "@/api/migration";
 import AppHeader from "@/components/migration/AppHeader.vue";
+import MigrationResultPanel from "@/components/migration/MigrationResultPanel.vue";
+import MigrationReviewDialog from "@/components/migration/MigrationReviewDialog.vue";
 import SourceInputPanel from "@/components/migration/SourceInputPanel.vue";
 import WorkflowStepper from "@/components/migration/WorkflowStepper.vue";
 import { useMigrationPolling } from "@/composables/useMigrationPolling";
-import type { MigrationPhase, MigrationStatus } from "@/types/migration";
-const { task, isPolling, pollingError, startPolling } = useMigrationPolling();
+import { useMigrationReview } from "@/composables/useMigrationReview";
+import {
+  migrationExamples,
+  migrationStatusMessages,
+} from "@/constants/migration";
+import type { MigrationPhase } from "@/types/migration";
 
-const examples = {
-  counter: {
-    filename: "Counter.tsx",
-    source: `import { useState } from "react";
+const { task, pollingError, startPolling, stopPolling, resetPolling } =
+  useMigrationPolling();
 
-export function Counter() {
-  const [count, setCount] = useState(0);
-
-  return (
-    <button onClick={() => setCount(count + 1)}>
-      Count: {count}
-    </button>
-  );
-}`,
-  },
-  userList: {
-    filename: "UserList.tsx",
-    source: `import { useMemo, useState } from "react";
-
-interface User {
-  id: string;
-  name: string;
-}
-
-export function UserList({ users }: { users: User[] }) {
-  const [keyword, setKeyword] = useState("");
-  const filteredUsers = useMemo(
-    () => users.filter((user) => user.name.includes(keyword)),
-    [users, keyword],
-  );
-
-  return (
-    <section>
-      <input
-        value={keyword}
-        onChange={(event) => setKeyword(event.target.value)}
-      />
-      <ul>
-        {filteredUsers.map((user) => (
-          <li key={user.id}>{user.name}</li>
-        ))}
-      </ul>
-    </section>
-  );
-}`,
-  },
-};
-
-const filename = ref(examples.userList.filename);
-const sourceCode = ref(examples.userList.source);
+const filename = ref(migrationExamples.userList.filename);
+const sourceCode = ref(migrationExamples.userList.source);
 const phase = ref<MigrationPhase>("idle");
 const taskId = ref<number | null>(null);
 const statusMessage = ref(
@@ -66,33 +27,66 @@ const statusMessage = ref(
 );
 const errorMessage = ref("");
 
-const isBusy = computed(() =>
-  ["submitting", "analyzing", "planning", "generating", "validating"].includes(
-    phase.value,
+const {
+  reviewDialogVisible,
+  reviewPlan,
+  reviewSubmitting,
+  reviewError,
+  resetReviewState,
+  handleReviewTask,
+  approvePlan,
+  requestPlanChanges,
+  cancelMigration,
+} = useMigrationReview({
+  taskId,
+  phase,
+  statusMessage,
+  startPolling,
+  stopPolling,
+});
+
+const isBusy = computed(
+  () =>
+    !["idle", "completed", "failed", "rejected", "cancelled"].includes(
+      phase.value,
+    ),
+);
+const hasResult = computed(() =>
+  Boolean(
+    task.value?.generated_code ||
+      task.value?.validation_result ||
+      task.value?.migration_report,
   ),
 );
 
-function loadExample(exampleKey: keyof typeof examples) {
-  const example = examples[exampleKey];
+function loadExample(exampleKey: keyof typeof migrationExamples) {
+  resetPolling();
+  const example = migrationExamples[exampleKey];
   filename.value = example.filename;
   sourceCode.value = example.source;
   phase.value = "idle";
   taskId.value = null;
+  resetReviewState();
   errorMessage.value = "";
   statusMessage.value = "示例已载入，可以开始分析迁移路径。";
 }
 
 function clearSource() {
+  resetPolling();
   filename.value = "";
   sourceCode.value = "";
   phase.value = "idle";
   taskId.value = null;
+  resetReviewState();
   errorMessage.value = "";
   statusMessage.value = "输入一个 React 函数组件开始迁移。";
 }
 
 async function submitMigration() {
+  resetPolling();
+  taskId.value = null;
   errorMessage.value = "";
+  resetReviewState();
 
   if (!filename.value.trim() || !sourceCode.value.trim()) {
     errorMessage.value = "请填写文件名并粘贴 React 组件源码。";
@@ -128,44 +122,23 @@ async function submitMigration() {
     statusMessage.value = "任务未创建，源码仍保留在编辑器中。";
   }
 }
-
-/**
- * 后端状态对应的页面提示文案。
- */
-const statusMessages: Record<MigrationStatus, string> = {
-  queued: "迁移任务已进入执行队列。",
-  analyzing: "正在解析 React 源码和 AST。",
-  planning: "源码分析完成，正在生成迁移计划。",
-  waiting_for_review: "迁移计划已生成，请确认后继续。",
-  generating: "正在根据迁移计划生成 Vue 组件。",
-  validating: "正在执行 Vue SFC、Lint 和类型检查。",
-  repairing: "检查发现问题，正在尝试自动修复。",
-  completed: "React 组件迁移已经完成。",
-  failed: "迁移任务执行失败。",
-};
-
-/**
- * 监听轮询得到的最新任务数据。
- *
- * 每次 useMigrationPolling 更新 task.value，
- * 这里都会自动更新页面 phase 和提示文案。
- */
 watch(task, (latestTask) => {
   if (!latestTask) {
     return;
   }
 
-  // 保存后端最新返回的任务 ID
   taskId.value = latestTask.id;
-
-  // 将后端 status 同步给步骤条
   phase.value = latestTask.status;
 
-  // 更新页面提示信息
-  statusMessage.value = statusMessages[latestTask.status];
+  handleReviewTask(latestTask);
+
+  statusMessage.value = migrationStatusMessages[latestTask.status];
 
   if (latestTask.status === "failed") {
-    errorMessage.value = "迁移执行失败，请检查后端日志。";
+    const firstError = latestTask.validation_result?.errors[0];
+    errorMessage.value = firstError
+      ? `迁移执行失败：${firstError.message}`
+      : "迁移执行失败，请检查后端日志。";
   } else {
     errorMessage.value = "";
   }
@@ -194,6 +167,17 @@ watch(task, (latestTask) => {
         </ul>
       </section>
 
+      <div
+        v-if="phase === 'waiting_for_review' && !reviewDialogVisible"
+        class="review-ready-banner"
+        role="status"
+      >
+        <p>迁移计划正在等待你的确认，工作流已安全暂停。</p>
+        <button type="button" @click="reviewDialogVisible = true">
+          查看迁移计划
+        </button>
+      </div>
+
       <section id="workspace" class="workspace" aria-label="迁移工作台">
         <SourceInputPanel
           v-model:filename="filename"
@@ -208,9 +192,16 @@ watch(task, (latestTask) => {
         <WorkflowStepper
           :phase="phase"
           :task-id="taskId"
+          :current-node="task?.current_node ?? null"
           :message="statusMessage"
         />
       </section>
+
+      <p v-if="pollingError" class="polling-error" role="alert">
+        {{ pollingError }}，页面会继续自动重试。
+      </p>
+
+      <MigrationResultPanel v-if="task && hasResult" :task="task" />
 
       <section class="principles" aria-labelledby="principles-title">
         <div class="section-heading">
@@ -242,6 +233,18 @@ watch(task, (latestTask) => {
       <p>React → Vue 3 Migration Workspace</p>
       <p>当前版本聚焦单个 React 函数组件的可解释迁移。</p>
     </footer>
+
+    <MigrationReviewDialog
+      :open="reviewDialogVisible"
+      :task-id="taskId"
+      :plan="reviewPlan"
+      :submitting="reviewSubmitting"
+      :error-message="reviewError"
+      @close="reviewDialogVisible = false"
+      @approve="approvePlan"
+      @request-changes="requestPlanChanges"
+      @cancel="cancelMigration"
+    />
   </div>
 </template>
 

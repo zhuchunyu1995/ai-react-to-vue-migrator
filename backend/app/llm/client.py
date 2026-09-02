@@ -13,7 +13,7 @@ def get_llm() -> BaseChatModel:
 
     return ChatOpenAI(
         model=settings.llm_model,
-        api_key=settings.qwen_api_key,
+        api_key=settings.deepseek_api_key,
         base_url=settings.llm_base_url,
         temperature=settings.llm_temperature,
     )

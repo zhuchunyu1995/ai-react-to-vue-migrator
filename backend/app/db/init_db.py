@@ -2,9 +2,9 @@ import asyncio
 
 from app.db.base import Base
 from app.db.session import async_engine
+from app.models.migrations import Migration
 
 # 必须导入具体 ORM 模型，否则 Base.metadata 不知道有哪些表
-from app.models.migrations import Migration
 
 
 async def init_db() -> None:

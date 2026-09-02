@@ -6,6 +6,7 @@ import type { MigrationPhase, WorkflowStepState } from "@/types/migration";
 const props = defineProps<{
   phase: MigrationPhase;
   taskId: number | null;
+  currentNode: string | null;
   message: string;
 }>();
 
@@ -23,23 +24,54 @@ const phaseOrder: Record<MigrationPhase, number> = {
   submitting: 0,
   queued: 0,
   analyzing: 0,
+  analyzed: 1,
   planning: 1,
+  planned: 2,
   waiting_for_review: 2,
+  approved: 3,
+  revision_requested: 1,
+  revising_plan: 1,
+  cancelled: 2,
+  rejected: 2,
   generating: 3,
+  generated: 4,
   validating: 4,
+  validated: 5,
+  validation_failed: 4,
   repairing: 4,
+  repaired: 4,
+  report_generated: 5,
   completed: 6,
   failed: -1,
 };
 
+const nodeOrder: Record<string, number> = {
+  analyze_source: 0,
+  create_plan: 1,
+  revise_plan: 1,
+  human_review: 2,
+  generate_code: 3,
+  persist_generated_code: 3,
+  validate_code: 4,
+  repair_code: 4,
+  generate_report: 5,
+  persist_report: 5,
+};
+
 const steps = computed(() => {
   const currentIndex = phaseOrder[props.phase];
+  const failureIndex = props.currentNode
+    ? (nodeOrder[props.currentNode] ?? 0)
+    : 0;
 
   return definitions.map(([id, label, description], index) => {
     let state: WorkflowStepState = "pending";
     if (props.phase === "completed" || index < currentIndex) state = "done";
     if (index === currentIndex && props.phase !== "completed") state = "active";
-    if (props.phase === "failed" && index === 0) state = "error";
+    if (props.phase === "failed" && index < failureIndex) state = "done";
+    if (props.phase === "failed" && index === failureIndex) state = "error";
+    if (props.phase === "rejected" && index === 2) state = "error";
+    if (props.phase === "cancelled" && index === 2) state = "error";
 
     return { id, label, description, state };
   });

@@ -1,349 +1,532 @@
-import path from "node:path";
-
 import { parse, type ParserPlugin } from "@babel/parser";
 import traverse from "@babel/traverse";
 import * as t from "@babel/types";
 
-import type { HookAnalysis, ImportAnalysis, SourceAnalysis } from "./types.js";
+interface ImportInfo {
+  source: string;
+  specifiers: string[];
+  line: number | null;
+}
+
+interface HookInfo {
+  name: string;
+  code: string;
+  dependencies: string[];
+  line: number | null;
+}
+
+interface StateInfo {
+  hook: "useState" | "useReducer";
+  state_name: string | null;
+  setter_name: string | null;
+  initial_value: string | null;
+  line: number | null;
+}
+
+interface PropInfo {
+  name: string;
+  line: number | null;
+}
+
+interface EventInfo {
+  name: string;
+  element: string;
+  handler: string | null;
+  line: number | null;
+}
+
+interface ReactAnalysisResult {
+  filename: string;
+  language: "javascript" | "typescript";
+  component_name: string | null;
+
+  imports: ImportInfo[];
+  components: string[];
+  hooks: HookInfo[];
+  states: StateInfo[];
+  props: PropInfo[];
+  events: EventInfo[];
+
+  jsx_elements: string[];
+  list_renderings: string[];
+  conditional_renderings: string[];
+  exports: string[];
+
+  warnings: string[];
+}
 
 /**
- * 根据文件扩展名选择 Babel 解析插件。
- *
- * .js 和 .jsx：解析 JSX
- * .ts：解析 TypeScript
- * .tsx：同时解析 TypeScript 和 JSX
+ * 根据文件扩展名选择 Babel Parser 插件。
  */
 function getParserPlugins(filename: string): ParserPlugin[] {
-  const extension = path.extname(filename).toLowerCase();
+  const lowerFilename = filename.toLowerCase();
 
-  switch (extension) {
-    case ".tsx":
-      return ["typescript", "jsx"];
+  const isTypeScript =
+    lowerFilename.endsWith(".ts") || lowerFilename.endsWith(".tsx");
 
-    case ".ts":
-      return ["typescript"];
+  const containsJsx =
+    lowerFilename.endsWith(".js") ||
+    lowerFilename.endsWith(".jsx") ||
+    lowerFilename.endsWith(".tsx");
 
-    case ".jsx":
-    case ".js":
-      return ["jsx"];
+  const plugins: ParserPlugin[] = [];
 
-    default:
-      throw new Error(`不支持的源码文件类型：${extension || "无扩展名"}`);
+  if (isTypeScript) {
+    plugins.push("typescript");
   }
+
+  if (containsJsx) {
+    plugins.push("jsx");
+  }
+
+  return plugins;
+}
+
+/**
+ * 判断当前文件是否为 TypeScript。
+ */
+function getLanguage(filename: string): "javascript" | "typescript" {
+  const lowerFilename = filename.toLowerCase();
+
+  if (lowerFilename.endsWith(".ts") || lowerFilename.endsWith(".tsx")) {
+    return "typescript";
+  }
+
+  return "javascript";
+}
+
+/**
+ * 获取 AST 节点对应的源代码。
+ */
+function getNodeSource(node: t.Node, sourceCode: string): string {
+  if (typeof node.start !== "number" || typeof node.end !== "number") {
+    return "";
+  }
+
+  return sourceCode.slice(node.start, node.end).trim();
+}
+
+/**
+ * 获取节点所在行号。
+ */
+function getNodeLine(node: t.Node): number | null {
+  return node.loc?.start.line ?? null;
 }
 
 /**
  * 判断名称是否可能是 React 组件名。
  *
- * React 组件通常以大写字母开头。
+ * React 组件通常使用大写字母开头。
  */
 function isComponentName(name: string): boolean {
   return /^[A-Z]/.test(name);
 }
 
 /**
- * 读取 JSX 标签名称。
+ * 获取 JSX 标签名称。
  *
  * 支持：
  * div
  * UserCard
- * React.Fragment
+ * Form.Input
  */
 function getJsxElementName(
   node: t.JSXIdentifier | t.JSXMemberExpression | t.JSXNamespacedName,
 ): string {
   if (t.isJSXIdentifier(node)) {
-    // <Button />   node 是 JSXIdentifier，name = 'Button'
-    //  <HelloWorld />    // name = 'HelloWorld'
-    // <div />           // name = 'div'
     return node.name;
   }
 
   if (t.isJSXMemberExpression(node)) {
-    // <Button.Primary /> -> 'Button.Primary'
-    return `${getJsxElementName(node.object)}.${node.property.name}`;
+    return `${getJsxElementName(node.object)}.${getJsxElementName(
+      node.property,
+    )}`;
   }
-  //  <svg:circle /> →  'svg:circle'
+
   return `${node.namespace.name}:${node.name.name}`;
 }
 
 /**
- * 读取函数调用名称。
- *
- * 支持：
- * useState()
- * React.useState()
- */
-function getCallName(callee: t.CallExpression["callee"]): string | null {
-  if (t.isIdentifier(callee)) {
-    return callee.name;
-  }
-  //   React.useState()  → useState
-  //   Array.isArray()   → isArray
-  if (
-    t.isMemberExpression(callee) &&
-    !callee.computed &&
-    t.isIdentifier(callee.property)
-  ) {
-    return callee.property.name;
-  }
-
-  return null;
-}
-
-/**
- * 从函数的解构参数中提取 Props。
+ * 从函数参数中提取 props。
  *
  * 例如：
- * function UserCard({ name, avatar }) {}
- *
- * 最终提取：
- * ["name", "avatar"]
+ * function UserList({ users, loading }) {}
  */
-function collectPropsFromObjectPattern(
-  pattern: t.ObjectPattern,
-  props: Set<string>,
+function collectPropsFromParameters(
+  parameters: Array<
+    t.Identifier | t.Pattern | t.RestElement | t.TSParameterProperty
+  >,
+  props: PropInfo[],
 ): void {
-  for (const property of pattern.properties) {
-    if (t.isObjectProperty(property)) {
-      if (t.isIdentifier(property.key)) {
-        props.add(property.key.name);
-      } else if (t.isStringLiteral(property.key)) {
-        props.add(property.key.value);
+  const firstParameter = parameters[0];
+
+  if (!firstParameter) {
+    return;
+  }
+
+  if (t.isObjectPattern(firstParameter)) {
+    for (const property of firstParameter.properties) {
+      if (t.isObjectProperty(property) && t.isIdentifier(property.key)) {
+        props.push({
+          name: property.key.name,
+          line: getNodeLine(property),
+        });
+      }
+
+      if (t.isRestElement(property) && t.isIdentifier(property.argument)) {
+        props.push({
+          name: `...${property.argument.name}`,
+          line: getNodeLine(property),
+        });
       }
     }
 
-    if (t.isRestElement(property) && t.isIdentifier(property.argument)) {
-      props.add(`...${property.argument.name}`);
-    }
+    return;
+  }
+
+  if (t.isIdentifier(firstParameter)) {
+    props.push({
+      name: firstParameter.name,
+      line: getNodeLine(firstParameter),
+    });
   }
 }
 
 /**
- * 使用 Babel AST 分析 React 源码。
- *
- * 注意：这里不返回完整 AST，只返回迁移工作流需要的摘要。
+ * 提取 useEffect/useMemo 等 Hook 的依赖数组。
+ */
+function getHookDependencies(
+  node: t.CallExpression,
+  sourceCode: string,
+): string[] {
+  const dependencyArgument = node.arguments[1];
+
+  if (!t.isArrayExpression(dependencyArgument)) {
+    return [];
+  }
+
+  return dependencyArgument.elements
+    .filter((element): element is t.Expression | t.SpreadElement => {
+      return element !== null;
+    })
+    .map((element) => {
+      return getNodeSource(element, sourceCode);
+    });
+}
+
+/**
+ * 根据文件名推断默认组件名。
+ */
+function getFilenameComponentName(filename: string): string | null {
+  const basename = filename
+    .split("/")
+    .pop()
+    ?.replace(/\.[^.]+$/, "");
+
+  return basename || null;
+}
+
+/**
+ * 分析 React 源代码。
  */
 export function analyzeReactSource(
   filename: string,
   sourceCode: string,
-): SourceAnalysis {
-  const ast = parse(sourceCode, {
-    // 自动判断源码是 ES Module 还是普通 Script
-    sourceType: "unambiguous",
+): ReactAnalysisResult {
+  const imports: ImportInfo[] = [];
+  const components: string[] = [];
+  const hooks: HookInfo[] = [];
+  const states: StateInfo[] = [];
+  const props: PropInfo[] = [];
+  const events: EventInfo[] = [];
 
-    // 根据扩展名启用 JSX、TypeScript
-    plugins: getParserPlugins(filename),
-  });
-
-  const componentNames = new Set<string>();
-  const props = new Set<string>();
   const jsxElements = new Set<string>();
-  const events = new Set<string>();
-  const warnings = new Set<string>();
+  const listRenderings: string[] = [];
+  const conditionalRenderings: string[] = [];
+  const exports: string[] = [];
+  const warnings: string[] = [];
 
-  const imports: ImportAnalysis[] = [];
-  const hooks: HookAnalysis[] = [];
+  let ast: ReturnType<typeof parse>;
 
-  let hasDefaultExport = false;
+  try {
+    ast = parse(sourceCode, {
+      sourceType: "unambiguous",
+      plugins: getParserPlugins(filename),
+
+      // 保留节点位置信息，后续生成行号。
+      ranges: true,
+
+      // 遇到部分可恢复错误时继续解析。
+      errorRecovery: true,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    throw new Error(`React 源代码解析失败：${message}`);
+  }
+
+  /*
+   * errorRecovery=true 时，部分错误会保存在 ast.errors。
+   */
+  for (const error of ast.errors) {
+    warnings.push(error.message);
+  }
 
   traverse(ast, {
-    /**
-     * 分析 import。
-     *
-     * 例如：
-     * import React, { useState } from "react"
+    /*
+     * 收集 import。
      */
-    ImportDeclaration(nodePath) {
+    ImportDeclaration(path) {
+      const specifiers = path.node.specifiers.map((specifier) => {
+        if (t.isImportDefaultSpecifier(specifier)) {
+          return specifier.local.name;
+        }
+
+        if (t.isImportNamespaceSpecifier(specifier)) {
+          return `* as ${specifier.local.name}`;
+        }
+
+        if (t.isIdentifier(specifier.imported)) {
+          return specifier.imported.name;
+        }
+
+        return specifier.imported.value;
+      });
+
       imports.push({
-        source: nodePath.node.source.value,
-        specifiers: nodePath.node.specifiers.map(
-          (specifier) => specifier.local.name,
-        ),
+        source: path.node.source.value,
+        specifiers,
+        line: getNodeLine(path.node),
       });
     },
 
-    /**
-     * 分析函数声明形式的组件。
+    /*
+     * 收集函数声明形式的组件。
      *
      * 例如：
-     * function UserCard({ name }) {}
+     * function UserList() {}
      */
-    FunctionDeclaration(nodePath) {
-      const componentName = nodePath.node.id?.name;
+    FunctionDeclaration(path) {
+      const componentName = path.node.id?.name;
 
-      if (!componentName || !isComponentName(componentName)) {
-        return;
-      }
+      if (componentName && isComponentName(componentName)) {
+        components.push(componentName);
 
-      componentNames.add(componentName);
-
-      const firstParameter = nodePath.node.params[0];
-
-      if (t.isObjectPattern(firstParameter)) {
-        collectPropsFromObjectPattern(firstParameter, props);
+        collectPropsFromParameters(path.node.params, props);
       }
     },
 
-    /**
-     * 分析箭头函数形式的组件。
-     *
-     * 例如：
-     * const UserCard = ({ name }) => {}
+    /*
+     * 收集变量形式组件，以及 useState/useReducer 状态。
      */
-    VariableDeclarator(nodePath) {
-      if (!t.isIdentifier(nodePath.node.id)) {
-        return;
-      }
+    VariableDeclarator(path) {
+      const { id, init } = path.node;
 
-      const variableName = nodePath.node.id.name;
-      const initializer = nodePath.node.init;
-
+      /*
+       * const UserList = () => {}
+       */
       if (
-        !isComponentName(variableName) ||
-        (!t.isArrowFunctionExpression(initializer) &&
-          !t.isFunctionExpression(initializer))
+        t.isIdentifier(id) &&
+        isComponentName(id.name) &&
+        (t.isArrowFunctionExpression(init) || t.isFunctionExpression(init))
       ) {
-        return;
+        components.push(id.name);
+
+        collectPropsFromParameters(init.params, props);
       }
 
-      componentNames.add(variableName);
-
-      const firstParameter = initializer.params[0];
-
-      if (t.isObjectPattern(firstParameter)) {
-        collectPropsFromObjectPattern(firstParameter, props);
-      }
-    },
-
-    /**
-     * 分析函数调用，识别 React Hook。
-     *
-     * 例如：
-     * useState()
-     * useEffect(() => {}, [userId])
-     */
-    CallExpression(nodePath) {
-      const hookName = getCallName(nodePath.node.callee);
-
-      if (!hookName || !/^use[A-Z0-9]/.test(hookName)) {
-        return;
-      }
-
-      let dependencyCount: number | null = null;
-
+      /*
+       * const [keyword, setKeyword] = useState("")
+       */
       if (
-        hookName === "useEffect" ||
-        hookName === "useMemo" ||
-        hookName === "useCallback"
+        t.isArrayPattern(id) &&
+        t.isCallExpression(init) &&
+        t.isIdentifier(init.callee) &&
+        (init.callee.name === "useState" || init.callee.name === "useReducer")
       ) {
-        const dependencies = nodePath.node.arguments[1];
+        const stateElement = id.elements[0];
+        const setterElement = id.elements[1];
 
-        if (t.isArrayExpression(dependencies)) {
-          dependencyCount = dependencies.elements.length;
-        }
+        states.push({
+          hook: init.callee.name,
+          state_name:
+            stateElement && t.isIdentifier(stateElement)
+              ? stateElement.name
+              : null,
+          setter_name:
+            setterElement && t.isIdentifier(setterElement)
+              ? setterElement.name
+              : null,
+          initial_value: init.arguments[0]
+            ? getNodeSource(init.arguments[0], sourceCode)
+            : null,
+          line: getNodeLine(path.node),
+        });
       }
-
-      hooks.push({
-        name: hookName,
-        line: nodePath.node.loc?.start.line ?? null,
-        dependency_count: dependencyCount,
-      });
     },
 
-    /**
-     * 分析 props.xxx 访问形式。
-     *
-     * 例如：
-     * props.name
+    /*
+     * 收集所有 Hook 调用。
      */
-    MemberExpression(nodePath) {
-      const { object, property, computed } = nodePath.node;
+    CallExpression(path) {
+      const { node } = path;
 
+      if (t.isIdentifier(node.callee) && /^use[A-Z]/.test(node.callee.name)) {
+        hooks.push({
+          name: node.callee.name,
+          code: getNodeSource(node, sourceCode),
+          dependencies: getHookDependencies(node, sourceCode),
+          line: getNodeLine(node),
+        });
+      }
+
+      /*
+       * 收集 JSX 中的数组 map 渲染。
+       *
+       * 例如：
+       * users.map(user => <li />)
+       */
       if (
-        t.isIdentifier(object, { name: "props" }) &&
-        !computed &&
-        t.isIdentifier(property)
+        t.isMemberExpression(node.callee) &&
+        t.isIdentifier(node.callee.property, {
+          name: "map",
+        })
       ) {
-        props.add(property.name);
+        listRenderings.push(getNodeSource(node, sourceCode));
       }
     },
 
-    /**
-     * 分析 JSX 标签。
-     *
-     * 例如：
-     * <div>
-     * <UserCard>
-     * <React.Fragment>
+    /*
+     * 收集 JSX 标签和事件。
      */
-    JSXOpeningElement(nodePath) {
-      jsxElements.add(getJsxElementName(nodePath.node.name));
+    JSXOpeningElement(path) {
+      const elementName = getJsxElementName(path.node.name);
 
-      for (const attribute of nodePath.node.attributes) {
+      jsxElements.add(elementName);
+
+      for (const attribute of path.node.attributes) {
         if (
-          t.isJSXAttribute(attribute) &&
-          t.isJSXIdentifier(attribute.name) &&
-          /^on[A-Z]/.test(attribute.name.name)
+          !t.isJSXAttribute(attribute) ||
+          !t.isJSXIdentifier(attribute.name)
         ) {
-          events.add(attribute.name.name);
+          continue;
+        }
+
+        const attributeName = attribute.name.name;
+
+        /*
+         * React 事件通常以 on 开头：
+         * onClick、onChange、onSubmit。
+         */
+        if (/^on[A-Z]/.test(attributeName)) {
+          let handler: string | null = null;
+
+          if (
+            t.isJSXExpressionContainer(attribute.value) &&
+            !t.isJSXEmptyExpression(attribute.value.expression)
+          ) {
+            handler = getNodeSource(attribute.value.expression, sourceCode);
+          }
+
+          events.push({
+            name: attributeName,
+            element: elementName,
+            handler,
+            line: getNodeLine(attribute),
+          });
         }
       }
     },
 
-    /**
-     * 判断是否存在默认导出。
+    /*
+     * 收集三元表达式条件渲染。
+     *
+     * 例如：
+     * loading ? <Loading /> : <List />
      */
-    ExportDefaultDeclaration(nodePath) {
-      hasDefaultExport = true;
-
-      const declaration = nodePath.node.declaration;
-
+    ConditionalExpression(path) {
       if (
-        t.isFunctionDeclaration(declaration) &&
-        declaration.id &&
-        isComponentName(declaration.id.name)
+        path.findParent((parentPath) => {
+          return parentPath.isJSXExpressionContainer();
+        })
       ) {
-        componentNames.add(declaration.id.name);
+        conditionalRenderings.push(getNodeSource(path.node, sourceCode));
       }
     },
 
-    /**
-     * 第一版暂不自动迁移 class 组件。
-     * 发现 class 组件时添加风险提示。
+    /*
+     * 收集 && 条件渲染。
+     *
+     * 例如：
+     * loading && <Loading />
      */
-    ClassDeclaration(nodePath) {
-      const superClass = nodePath.node.superClass;
+    LogicalExpression(path) {
+      if (
+        path.node.operator === "&&" &&
+        path.findParent((parentPath) => {
+          return parentPath.isJSXExpressionContainer();
+        })
+      ) {
+        conditionalRenderings.push(getNodeSource(path.node, sourceCode));
+      }
+    },
 
-      const extendsComponent =
-        t.isIdentifier(superClass, { name: "Component" }) ||
-        (t.isMemberExpression(superClass) &&
-          t.isIdentifier(superClass.object, { name: "React" }) &&
-          t.isIdentifier(superClass.property, { name: "Component" }));
+    /*
+     * 收集默认导出。
+     */
+    ExportDefaultDeclaration(path) {
+      exports.push(
+        `default:${getNodeSource(path.node.declaration, sourceCode)}`,
+      );
+    },
 
-      if (extendsComponent) {
-        if (nodePath.node.id?.name) {
-          componentNames.add(nodePath.node.id.name);
-        }
+    /*
+     * 收集命名导出。
+     */
+    ExportNamedDeclaration(path) {
+      if (path.node.declaration) {
+        exports.push(getNodeSource(path.node.declaration, sourceCode));
+      }
 
-        warnings.add("检测到 React class 组件，需要人工确认迁移方案");
+      for (const specifier of path.node.specifiers) {
+        exports.push(getNodeSource(specifier, sourceCode));
       }
     },
   });
 
-  if (componentNames.size === 0) {
-    warnings.add("没有识别到明确的 React 组件名称");
+  /*
+   * 去重，防止同一个组件被多次记录。
+   */
+  const uniqueComponents = [...new Set(components)];
+
+  const uniqueProps = Array.from(
+    new Map(props.map((prop) => [`${prop.name}:${prop.line}`, prop])).values(),
+  );
+
+  const componentName =
+    uniqueComponents[0] ?? getFilenameComponentName(filename);
+
+  if (uniqueComponents.length === 0) {
+    warnings.push("没有识别到明确的 React 函数组件，组件名暂时根据文件名推断");
   }
 
   return {
     filename,
-    component_names: [...componentNames],
+    language: getLanguage(filename),
+    component_name: componentName,
+
     imports,
+    components: uniqueComponents,
     hooks,
-    props: [...props],
+    states,
+    props: uniqueProps,
+    events,
+
     jsx_elements: [...jsxElements],
-    events: [...events],
-    has_default_export: hasDefaultExport,
-    warnings: [...warnings],
+    list_renderings: listRenderings,
+    conditional_renderings: conditionalRenderings,
+    exports,
+
+    warnings,
   };
 }

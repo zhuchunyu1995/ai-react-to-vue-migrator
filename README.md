@@ -31,8 +31,12 @@ SFC / ESLint / 类型 / Build 验证
 - FastAPI 基础服务、异步数据库会话和迁移任务模型；
 - 创建迁移任务与查询任务接口；
 - LangGraph 和大模型基础链路；
-- Vue 3 迁移工作台首页；
-- Node Runner 基础工程。
+- SQLite Checkpointer 与迁移计划人工审核恢复；
+- Babel AST React 源码分析；
+- Vue 3 代码生成、持久化和有限自动修复；
+- SFC、ESLint、vue-tsc 与 Vite Build 自动验证；
+- 结构化迁移报告和 Markdown 报告；
+- Vue 3 迁移工作台、反馈修订式人工审核、进度轮询和结果展示。
 
 ## 三、关键目录
 

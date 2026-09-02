@@ -58,6 +58,13 @@ h2 {
   color: var(--danger);
 }
 
+.status-pill.cancelled,
+.status-pill.rejected {
+  border-color: rgba(185, 28, 28, 0.18);
+  background: rgba(185, 28, 28, 0.08);
+  color: var(--danger);
+}
+
 .task-message {
   display: flex;
   gap: 11px;

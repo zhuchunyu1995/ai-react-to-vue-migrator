@@ -58,7 +58,7 @@ class NodeRunnerClient:
                 str(self.entry_path),
                 # Python 通过 stdin 向 Node 发送 JSON
                 stdin=asyncio.subprocess.PIPE,
-                # Node 通过 stdout 返回 JSON
+                # 可以读取console.log输出的结果
                 stdout=asyncio.subprocess.PIPE,
                 # stderr 用来接收运行时错误
                 stderr=asyncio.subprocess.PIPE,
